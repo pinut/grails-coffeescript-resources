@@ -2,49 +2,70 @@ import org.grails.plugin.resource.mapper.MapperPhase
 import org.codehaus.groovy.grails.commons.GrailsApplication
 import org.codehaus.groovy.grails.plugins.support.aware.GrailsApplicationAware
 import org.mozilla.javascript.EvaluatorException
+import org.grails.plugins.coffeescript.NodeJSCoffeeScriptEngine
+import org.grails.plugins.coffeescript.NodeJSCoffeeScriptException
 
 class CoffeeScriptResourceMapper implements GrailsApplicationAware {
 	def phase = MapperPhase.GENERATION
-	static defaultIncludes = [ '**/*.coffee' ]
+	static defaultIncludes = ['**/*.coffee']
 	static String COFFEE_FILE_EXTENSION = '.coffee'
 
-  GrailsApplication grailsApplication
+	GrailsApplication grailsApplication
 
 	def map(resource, config) {
-      File original = resource.processedFile
-      File target
+		if (isCoffeeResource(resource)) {
+			try {
+				mapCoffeeScript resource
+			}
+			catch (final Exception e) {
+				log.error """
+	Problems compiling CoffeeScript ${resource.originalUrl}
+	$e
+	            """
+			}
+		}
+	}
 
-	  if(resource.sourceUrl && original.name.toLowerCase().endsWith(COFFEE_FILE_EXTENSION)) {
-      File input = grailsApplication.parentContext.getResource(resource.sourceUrl).file
-      target = new File(original.absolutePath.replaceAll(/(?i)\.coffee/, '.js'))
+	private isCoffeeResource(resource) {
+		resource.sourceUrl && resource.processedFile.name.toLowerCase().endsWith(COFFEE_FILE_EXTENSION)
+	}
 
-      if(log.debugEnabled)
-        log.debug "Compiling coffeescript file ${original} into ${target}"
+	private mapCoffeeScript(resource) {
+		File original = resource.processedFile
+		File input = getOriginalFileSystemFile(resource.sourceUrl)
+		File target = generateCompiledFileFromOriginal(original)
 
-      try {
-        String output = new org.grails.plugins.coffeescript.CoffeeScriptEngine().compile(input.text)
-        target.write(output)
+		if (log.debugEnabled)
+			log.debug "Compiling coffeescript file ${original} into ${target}"
 
-        resource.processedFile = target
-        resource.updateActualUrlFromProcessedFile()
-        resource.sourceUrlExtension = 'js'
-        resource.actualUrl = resource.originalUrl.replaceAll(/(?i)\.coffee/, '.js')
-        resource.contentType = 'text/javascript'
+		compile(input, target)
 
-      } catch(Exception e) {
-        log.error """
-          Problems compiling CoffeeScript ${resource.originalUrl}
-          $e
-        """
-        Throwable cause = e
-        while (cause.cause) {
-          cause = cause.cause
-          if (cause instanceof EvaluatorException) {
-            log.error("CoffeeScript compilation error: $cause.message")
-          }
-        }
-        e.printStackTrace()
-      }
-    }
+		resource.processedFile = target
+		resource.updateActualUrlFromProcessedFile()
+		resource.sourceUrlExtension = 'js'
+		resource.actualUrl = generateCompiledFilename(resource.originalUrl)
+		resource.contentType = 'text/javascript'
+	}
+
+	private File generateCompiledFileFromOriginal(File original) {
+		new File(generateCompiledFilename(original.absolutePath))
+	}
+
+	private String generateCompiledFilename(String filename) {
+		filename.replaceAll(/(?i)\.coffee/, '.js')
+	}
+
+	private File getOriginalFileSystemFile(String sourcePath) {
+		grailsApplication.parentContext.getResource(sourcePath).file
+	}
+
+	private compile(input, target) {
+		if (NodeJSCoffeeScriptEngine.isAvailable()) {
+			new NodeJSCoffeeScriptEngine().compile input, target
+		}
+		else {
+			String output = new org.grails.plugins.coffeescript.CoffeeScriptEngine().compile(input.text)
+			target.write(output)
+		}
 	}
 }
