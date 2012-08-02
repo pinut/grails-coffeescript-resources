@@ -3,9 +3,6 @@ package org.grails.plugins.coffeescript
 class NodeJSCoffeeScriptEngine {
 
 	static isAvailable() {
-		println "OS Linux: ${isOperatingSystemSupported()}"
-		println "Node path: ${getNodePath()}"
-		println "Coffee path: ${getCoffeePath()}"
 		isOperatingSystemSupported() && getNodePath() && getCoffeePath()
 	}
 
@@ -32,14 +29,12 @@ class NodeJSCoffeeScriptEngine {
 	}
 
 	def compile(input, target) {
-		print "compiling coffee file '$input'... "
 		def args = createArgs(input)
 		def (process, output) = execute(args)
 		if (process.exitValue()) {
 			throw new NodeJSCoffeeScriptException(output.toString())
 		}
 		target.write output.toString()
-		println "done"
 	}
 
 	private createArgs(input) {
